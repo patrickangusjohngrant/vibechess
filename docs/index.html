@@ -7,7 +7,7 @@
 <style>
   :root { --sq: 64px; --piece: calc(var(--sq) * 0.78); }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; overflow: hidden; }
+  html, body { height: 100%; }
 
   body {
     background: #1a1a2e;
@@ -15,7 +15,8 @@
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
+    overflow-y: auto;
   }
 
   .container {
