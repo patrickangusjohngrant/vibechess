@@ -68,10 +68,10 @@ impl Default for Weights {
             centre_attack: 0.15,
             centre_occupy: 0.2,
             extended_centre_attack: 0.3,
-            passed_pawn_base: 0.8,
-            passed_pawn_quadratic: 0.08,
-            pawn_advance: 0.2,
-            repeat_penalty: 3.0,
+            passed_pawn_base: 0.2,
+            passed_pawn_quadratic: 0.3,
+            pawn_advance: 0.0,
+            repeat_penalty: 10.0,
         }
     }
 }
@@ -444,25 +444,40 @@ fn negamax(
 /// Depth is specified in "full moves" (e.g. depth=2 means the AI looks 2 moves
 /// ahead for each side = 4 plies total). The first ply is consumed by applying
 /// each candidate move, so negamax is called with `plies - 1`.
+const MIN_EVALS: u64 = 100_000;
+
+fn pick_move_at_depth(board: &Board, legal_moves: &[Move], plies: u32, config: &AiConfig) -> (Vec<ScoredMove>, u64) {
+    let mut evals: u64 = 0;
+    let scored: Vec<ScoredMove> = legal_moves
+        .iter()
+        .map(|mv| {
+            let mut clone = board.clone();
+            clone.apply_move(mv);
+            let score = -negamax(&clone, plies - 1, f64::NEG_INFINITY, f64::INFINITY, config, &mut evals);
+            ScoredMove { mv: mv.clone(), score }
+        })
+        .collect();
+    (scored, evals)
+}
+
 pub fn pick_move(board: &Board, config: &AiConfig) -> Option<PickResult> {
     let mut legal_moves = board.generate_legal_moves(board.current_turn);
     if legal_moves.is_empty() {
         return None;
     }
 
-    let plies = config.depth * 2;
     order_moves(board, &mut legal_moves);
 
-    let mut evals: u64 = 0;
-    let scored: Vec<ScoredMove> = legal_moves
-        .into_iter()
-        .map(|mv| {
-            let mut clone = board.clone();
-            clone.apply_move(&mv);
-            let score = -negamax(&clone, plies - 1, f64::NEG_INFINITY, f64::INFINITY, config, &mut evals);
-            ScoredMove { mv, score }
-        })
-        .collect();
+    let mut plies = config.depth * 2;
+    let (mut scored, mut evals) = pick_move_at_depth(board, &legal_moves, plies, config);
+
+    // If the search was too shallow, increase depth until we hit MIN_EVALS.
+    while evals < MIN_EVALS && plies < 6 {
+        plies += 1;
+        let (new_scored, new_evals) = pick_move_at_depth(board, &legal_moves, plies, config);
+        scored = new_scored;
+        evals = new_evals;
+    }
 
     let max_score = scored
         .iter()
