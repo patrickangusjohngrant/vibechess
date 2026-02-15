@@ -624,9 +624,9 @@ async function triggerAiMove() {
     const [f, t] = boardState.last_move;
     logMove('AI', f[0], f[1], t[0], t[1]);
   }
-  checkForCapture(oldState, boardState);
   renderPieces();
   renderCaptured();
+  checkForCapture(oldState, boardState);
   renderStatus();
   renderEval();
   if (boardState.game_over) { playEndAnimation(); }
@@ -729,7 +729,7 @@ function spawnExplosion(cx, cy, dirX, dirY) {
 }
 
 function animateParticle(el, x, y, vx, vy) {
-  const duration = 500 + Math.random() * 300;
+  const duration = 400 + Math.random() * 200;
   const start = performance.now();
   const gravity = 200;
 
@@ -740,8 +740,8 @@ function animateParticle(el, x, y, vx, vy) {
 
     const px = x + vx * t;
     const py = y + vy * t + 0.5 * gravity * t * t;
-    const opacity = 1 - progress * progress;
-    const scale = 1 - progress * 0.5;
+    const opacity = Math.max(0, 1 - progress * 2.5);
+    const scale = 1 - progress;
 
     el.style.left = px + 'px';
     el.style.top = py + 'px';
@@ -796,27 +796,83 @@ function playEndAnimation() {
 }
 
 function spawnBigExplosion(cx, cy) {
-  const count = 35;
-  const colors = ['#e74c3c', '#c0392b', '#f39c12', '#f1c40f', '#e67e22', '#fff', '#d35400', '#ff6b6b'];
-
-  for (let i = 0; i < count; i++) {
+  // --- Initial burst ---
+  const burstColors = ['#e74c3c', '#f39c12', '#f1c40f', '#fff', '#ff6b6b'];
+  for (let i = 0; i < 30; i++) {
     const p = document.createElement('div');
     p.className = 'particle';
-    const size = 5 + Math.random() * 10;
+    const size = 4 + Math.random() * 8;
     p.style.width = size + 'px';
     p.style.height = size + 'px';
-    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.background = burstColors[Math.floor(Math.random() * burstColors.length)];
     p.style.left = cx + 'px';
     p.style.top = cy + 'px';
-
     const angle = Math.random() * Math.PI * 2;
-    const speed = 80 + Math.random() * 200;
-    const vx = Math.cos(angle) * speed;
-    const vy = Math.sin(angle) * speed;
-
+    const speed = 100 + Math.random() * 250;
     document.body.appendChild(p);
-    animateParticle(p, cx, cy, vx, vy);
+    animateParticle(p, cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
   }
+
+  // --- Mushroom stem: particles rising up from the base ---
+  const stemColors = ['#e67e22', '#d35400', '#c0392b', '#f39c12', '#aaa'];
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = 6 + Math.random() * 8;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.background = stemColors[Math.floor(Math.random() * stemColors.length)];
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      document.body.appendChild(p);
+      const vx = (Math.random() - 0.5) * 30;
+      const vy = -(150 + Math.random() * 100);
+      animateMushroomParticle(p, cx, cy, vx, vy, 800 + Math.random() * 400);
+    }, i * 20);
+  }
+
+  // --- Mushroom cap: ring of particles expanding at the top ---
+  setTimeout(() => {
+    const capColors = ['#e74c3c', '#c0392b', '#f1c40f', '#ff6b6b', '#fff', '#f39c12'];
+    const capY = cy - 120;
+    for (let i = 0; i < 30; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = 6 + Math.random() * 12;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.background = capColors[Math.floor(Math.random() * capColors.length)];
+      p.style.left = cx + 'px';
+      p.style.top = capY + 'px';
+      document.body.appendChild(p);
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 100;
+      animateMushroomParticle(p, cx, capY, Math.cos(angle) * speed, Math.sin(angle) * speed * 0.5 - 20, 600 + Math.random() * 400);
+    }
+  }, 300);
+}
+
+function animateMushroomParticle(el, x, y, vx, vy, duration) {
+  const start = performance.now();
+
+  function tick(now) {
+    const t = (now - start) / 1000;
+    const progress = (now - start) / duration;
+    if (progress >= 1) { el.remove(); return; }
+
+    const px = x + vx * t;
+    const py = y + vy * t;
+    const opacity = Math.max(0, 1 - progress * 1.8);
+    const scale = 1 + progress * 0.5;
+
+    el.style.left = px + 'px';
+    el.style.top = py + 'px';
+    el.style.opacity = opacity;
+    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
 // --- Rendering ---
@@ -1129,9 +1185,9 @@ function executeMove(fromRow, fromCol, toRow, toCol, promotion) {
     const [f, t] = boardState.last_move;
     logMove('You', f[0], f[1], t[0], t[1]);
   }
-  checkForCapture(oldState, boardState);
   renderPieces();
   renderCaptured();
+  checkForCapture(oldState, boardState);
   renderStatus();
   renderEval();
   if (boardState.game_over) { playEndAnimation(); return; }
