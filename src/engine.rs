@@ -61,13 +61,6 @@ pub struct Weights {
     /// Penalty applied to the side currently in check (but not mated).
     pub check_penalty: f64,
 
-    // --- Early queen centre discount ---
-    /// Multiplier (0.0–1.0) for the queen's contribution to centre control
-    /// during the opening. 0.0 = queen attacks don't count, 1.0 = no discount.
-    pub early_queen_centre_mult: f64,
-    /// The move number threshold: discount applies when fullmove_number <= this value.
-    pub early_queen_centre_until: u32,
-
     // --- Draw avoidance module ---
     /// Flat penalty applied when the current position has been seen before.
     pub repeat_penalty: f64,
@@ -83,8 +76,6 @@ impl Default for Weights {
             passed_pawn_quadratic: 0.3,
             pawn_advance: 0.0,
             check_penalty: 2.0,
-            early_queen_centre_mult: 0.8,
-            early_queen_centre_until: 15,
             repeat_penalty: 5.0,
         }
     }
@@ -256,35 +247,15 @@ fn eval_material(board: &Board) -> f64 {
 /// Centre control: rewards attacking and occupying the four central squares
 /// (d4, d5, e4, e5) and the extended centre ring. Controlling the centre
 /// gives pieces more mobility and restricts the opponent.
-///
-/// In the opening (before `early_queen_centre_until`), queen attacks on centre
-/// squares are discounted by `early_queen_centre_mult` to discourage premature
-/// queen development for centre control.
 fn eval_centre_control(board: &Board, w: &Weights) -> f64 {
     let mut score = 0.0;
 
-    // Queen discount: in the opening, if a square is attacked by the queen,
-    // reduce that colour's attack bonus by (1 - mult) * weight.
-    let discount = if board.fullmove_number <= w.early_queen_centre_until {
-        1.0 - w.early_queen_centre_mult
-    } else {
-        0.0
-    };
-
     for &(r, c) in &CENTRE_SQUARES {
         if board.is_square_attacked_by(r, c, Color::White) {
-            let mut bonus = w.centre_attack;
-            if discount > 0.0 && board.is_square_attacked_by_queen(r, c, Color::White) {
-                bonus *= w.early_queen_centre_mult;
-            }
-            score += bonus;
+            score += w.centre_attack;
         }
         if board.is_square_attacked_by(r, c, Color::Black) {
-            let mut bonus = w.centre_attack;
-            if discount > 0.0 && board.is_square_attacked_by_queen(r, c, Color::Black) {
-                bonus *= w.early_queen_centre_mult;
-            }
-            score -= bonus;
+            score -= w.centre_attack;
         }
         if let Some(p) = board.squares[r][c] {
             if p.color == Color::White { score += w.centre_occupy; } else { score -= w.centre_occupy; }
@@ -293,18 +264,10 @@ fn eval_centre_control(board: &Board, w: &Weights) -> f64 {
 
     for &(r, c) in &EXTENDED_CENTRE {
         if board.is_square_attacked_by(r, c, Color::White) {
-            let mut bonus = w.extended_centre_attack;
-            if discount > 0.0 && board.is_square_attacked_by_queen(r, c, Color::White) {
-                bonus *= w.early_queen_centre_mult;
-            }
-            score += bonus;
+            score += w.extended_centre_attack;
         }
         if board.is_square_attacked_by(r, c, Color::Black) {
-            let mut bonus = w.extended_centre_attack;
-            if discount > 0.0 && board.is_square_attacked_by_queen(r, c, Color::Black) {
-                bonus *= w.early_queen_centre_mult;
-            }
-            score -= bonus;
+            score -= w.extended_centre_attack;
         }
     }
 

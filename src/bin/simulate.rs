@@ -165,15 +165,6 @@ fn main() {
         ("rep_pen=0.5", make_config(|w| w.repeat_penalty = 0.5)),
         ("rep_pen=5.0", make_config(|w| w.repeat_penalty = 5.0)),
         ("rep_pen=20.0", make_config(|w| w.repeat_penalty = 20.0)),
-        // Early queen centre multiplier
-        ("eq_mult=0.0", make_config(|w| w.early_queen_centre_mult = 0.0)),
-        ("eq_mult=0.5", make_config(|w| w.early_queen_centre_mult = 0.5)),
-        ("eq_mult=0.8", make_config(|w| w.early_queen_centre_mult = 0.8)),
-        ("eq_mult=1.0", make_config(|w| w.early_queen_centre_mult = 1.0)),
-        // Early queen until move N
-        ("eq_until=5", make_config(|w| w.early_queen_centre_until = 5)),
-        ("eq_until=8", make_config(|w| w.early_queen_centre_until = 8)),
-        ("eq_until=15", make_config(|w| w.early_queen_centre_until = 15)),
     ];
 
     // Phase 1: test each variation against the baseline
@@ -217,8 +208,6 @@ fn main() {
         ("pawn_adv", vec!["pawn_adv=0.0", "pawn_adv=0.1", "pawn_adv=0.2"]),
         ("chk_pen", vec!["chk_pen=0.0", "chk_pen=0.3", "chk_pen=1.0", "chk_pen=2.0"]),
         ("rep_pen", vec!["rep_pen=0.5", "rep_pen=5.0", "rep_pen=20.0"]),
-        ("eq_mult", vec!["eq_mult=0.0", "eq_mult=0.5", "eq_mult=0.8", "eq_mult=1.0"]),
-        ("eq_until", vec!["eq_until=5", "eq_until=8", "eq_until=15"]),
     ];
 
     let mut best_weights = Weights::default();
@@ -277,8 +266,6 @@ fn main() {
     println!("  passed_pawn_quadratic: {}", best_weights.passed_pawn_quadratic);
     println!("  pawn_advance: {}", best_weights.pawn_advance);
     println!("  check_penalty: {}", best_weights.check_penalty);
-    println!("  early_queen_centre_mult: {}", best_weights.early_queen_centre_mult);
-    println!("  early_queen_centre_until: {}", best_weights.early_queen_centre_until);
     println!("  repeat_penalty: {}", best_weights.repeat_penalty);
 }
 
@@ -309,13 +296,6 @@ fn apply_weight(weights: &mut Weights, label: &str) {
         "rep_pen=0.5" => weights.repeat_penalty = 0.5,
         "rep_pen=5.0" => weights.repeat_penalty = 5.0,
         "rep_pen=20.0" => weights.repeat_penalty = 20.0,
-        "eq_mult=0.0" => weights.early_queen_centre_mult = 0.0,
-        "eq_mult=0.5" => weights.early_queen_centre_mult = 0.5,
-        "eq_mult=0.8" => weights.early_queen_centre_mult = 0.8,
-        "eq_mult=1.0" => weights.early_queen_centre_mult = 1.0,
-        "eq_until=5" => weights.early_queen_centre_until = 5,
-        "eq_until=8" => weights.early_queen_centre_until = 8,
-        "eq_until=15" => weights.early_queen_centre_until = 15,
         _ => {}
     }
 }

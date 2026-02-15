@@ -218,28 +218,6 @@ impl Board {
         false
     }
 
-    /// Check if a queen of the given color attacks the target square.
-    pub fn is_square_attacked_by_queen(&self, row: usize, col: usize, attacker: Color) -> bool {
-        let dirs: [(i32, i32); 8] = [
-            (0, 1), (0, -1), (1, 0), (-1, 0),
-            (1, 1), (1, -1), (-1, 1), (-1, -1),
-        ];
-        for &(dr, dc) in &dirs {
-            let (mut r, mut c) = (row as i32 + dr, col as i32 + dc);
-            while Self::in_bounds(r, c) {
-                if let Some(p) = self.squares[r as usize][c as usize] {
-                    if p.color == attacker && p.piece_type == PieceType::Queen {
-                        return true;
-                    }
-                    break;
-                }
-                r += dr;
-                c += dc;
-            }
-        }
-        false
-    }
-
     pub fn is_in_check(&self, color: Color) -> bool {
         if let Some((kr, kc)) = self.find_king(color) {
             self.is_square_attacked_by(kr, kc, color.opposite())

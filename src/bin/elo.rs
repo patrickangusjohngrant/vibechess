@@ -1,5 +1,6 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
+use std::time::Instant;
 
 use chess::board::Board;
 use chess::engine::{pick_move, AiConfig};
@@ -8,7 +9,7 @@ use chess::piece::Color;
 
 const STOCKFISH_PATH: &str = "/home/patrick/.local/bin/stockfish";
 const MAX_MOVES: u32 = 200;
-const GAMES_PER_CONFIG: usize = 6;
+const GAMES_PER_CONFIG: usize = 16;
 
 struct StockfishEngine {
     child: std::process::Child,
@@ -89,15 +90,23 @@ impl Drop for StockfishEngine {
     }
 }
 
+struct GameResult {
+    outcome: &'static str,
+    ai_moves: u32,
+    ai_time_secs: f64,
+}
+
 fn play_game(
     ai_config: &AiConfig,
     ai_color: Color,
     sf_skill: u32,
     sf_time_ms: u32,
-) -> &'static str {
+) -> GameResult {
     let mut sf = StockfishEngine::new(sf_skill, sf_time_ms);
     let mut board = Board::new();
     let mut uci_moves: Vec<String> = Vec::new();
+    let mut ai_moves = 0u32;
+    let mut ai_time_secs = 0.0f64;
 
     for _ in 0..MAX_MOVES {
         if board.game_over {
@@ -105,8 +114,11 @@ fn play_game(
         }
 
         if board.current_turn == ai_color {
+            let start = Instant::now();
             match pick_move(&board, ai_config) {
                 Some(result) => {
+                    ai_time_secs += start.elapsed().as_secs_f64();
+                    ai_moves += 1;
                     uci_moves.push(result.mv.to_uci());
                     board.apply_move(&result.mv);
                 }
@@ -137,27 +149,20 @@ fn play_game(
         }
     }
 
-    if board.game_over {
+    let outcome = if board.game_over {
         match board.result.as_deref() {
             Some("White wins") => {
-                if ai_color == Color::White {
-                    "win"
-                } else {
-                    "loss"
-                }
+                if ai_color == Color::White { "win" } else { "loss" }
             }
             Some("Black wins") => {
-                if ai_color == Color::Black {
-                    "win"
-                } else {
-                    "loss"
-                }
+                if ai_color == Color::Black { "win" } else { "loss" }
             }
             _ => "draw",
         }
     } else {
         "draw"
-    }
+    };
+    GameResult { outcome, ai_moves, ai_time_secs }
 }
 
 /// Estimate ELO difference from score.
@@ -182,38 +187,55 @@ fn run_config(
     config: &AiConfig,
     sf_skill: u32,
     sf_time_ms: u32,
-) -> (u32, u32, u32) {
+) -> (u32, u32, u32, f64) {
+    let half = GAMES_PER_CONFIG / 2;
+
+    // Build a list of (game_index, ai_color) tasks
+    let mut tasks: Vec<(usize, Color)> = Vec::new();
+    for i in 0..half {
+        tasks.push((i, Color::White));
+    }
+    for i in 0..half {
+        tasks.push((i, Color::Black));
+    }
+
+    // Run all games in parallel
+    let handles: Vec<_> = tasks
+        .into_iter()
+        .map(|(i, color)| {
+            let config = config.clone();
+            let label = label.to_string();
+            std::thread::spawn(move || {
+                let side = if color == Color::White { "W" } else { "B" };
+                let gr = play_game(&config, color, sf_skill, sf_time_ms);
+                println!("  [{label} as {side}] game {}: {}", i + 1, gr.outcome);
+                gr
+            })
+        })
+        .collect();
+
     let mut wins = 0u32;
     let mut draws = 0u32;
     let mut losses = 0u32;
-
-    let half = GAMES_PER_CONFIG / 2;
-
-    // Play as White
-    for i in 0..half {
-        let result = play_game(config, Color::White, sf_skill, sf_time_ms);
-        match result {
+    let mut total_moves = 0u32;
+    let mut total_time = 0.0f64;
+    for h in handles {
+        let gr = h.join().unwrap();
+        match gr.outcome {
             "win" => wins += 1,
             "draw" => draws += 1,
             _ => losses += 1,
         }
-        print!("  [{label} as W] game {}: {result}  ", i + 1);
+        total_moves += gr.ai_moves;
+        total_time += gr.ai_time_secs;
     }
-    println!();
 
-    // Play as Black
-    for i in 0..half {
-        let result = play_game(config, Color::Black, sf_skill, sf_time_ms);
-        match result {
-            "win" => wins += 1,
-            "draw" => draws += 1,
-            _ => losses += 1,
-        }
-        print!("  [{label} as B] game {}: {result}  ", i + 1);
-    }
-    println!();
-
-    (wins, draws, losses)
+    let avg_ms = if total_moves > 0 {
+        total_time / total_moves as f64 * 1000.0
+    } else {
+        0.0
+    };
+    (wins, draws, losses, avg_ms)
 }
 
 fn main() {
@@ -235,24 +257,32 @@ fn main() {
             c.auto_deepen = false;
             c
         }),
-        ("medium (d1 auto-50k)", {
+        ("medium (d1 auto-25k)", {
             let mut c = AiConfig::new();
             c.depth = 1;
             c.auto_deepen = true;
-            c.min_evals = 50_000;
+            c.min_evals = 25_000;
             c
         }),
+        ("hard (d2 auto-200k)", {
+            let mut c = AiConfig::new();
+            c.depth = 2;
+            c.auto_deepen = true;
+            c.min_evals = 200_000;
+            c
+        }),
+
     ];
 
-    println!("{:<25} {:>4} {:>5} {:>6} {:>8}", "Config", "W", "D", "L", "ELO±");
-    println!("{}", "-".repeat(55));
+    println!("{:<25} {:>4} {:>5} {:>6} {:>8} {:>10}", "Config", "W", "D", "L", "ELO±", "ms/move");
+    println!("{}", "-".repeat(65));
 
     for (label, config) in &configs {
-        let (w, d, l) = run_config(label, config, sf_skill, sf_time_ms);
+        let (w, d, l, avg_ms) = run_config(label, config, sf_skill, sf_time_ms);
         let elo = elo_diff(w, d, l);
         println!(
-            "{:<25} {:>4} {:>5} {:>6} {:>+8.0}",
-            label, w, d, l, elo
+            "{:<25} {:>4} {:>5} {:>6} {:>+8.0} {:>10.1}",
+            label, w, d, l, elo, avg_ms
         );
         println!();
     }
