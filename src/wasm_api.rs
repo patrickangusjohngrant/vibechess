@@ -149,6 +149,7 @@ impl Game {
 
     pub fn set_depth(&mut self, depth: u32) {
         self.ai_config.depth = depth.clamp(1, 3);
+        self.ai_config.auto_deepen = false;
     }
 
     pub fn get_board_state(&self) -> JsValue {
@@ -251,7 +252,7 @@ impl Game {
     }
 
     pub fn get_eval_breakdown(&self) -> JsValue {
-        let breakdown = evaluate_breakdown(&self.board, self.board.current_turn, &self.ai_config);
+        let breakdown = evaluate_breakdown(&self.board, crate::piece::Color::White, &self.ai_config);
         let json = EvalBreakdownJson {
             mate: breakdown.mate,
             material: breakdown.material,

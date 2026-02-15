@@ -206,6 +206,7 @@
   }
   .menu-btn:hover { background: #1a5276; border-color: #3498db; transform: scale(1.03); }
   .menu-btn .sub { display: block; font-size: 0.8rem; color: #888; margin-top: 4px; font-weight: 400; }
+  #start-menu #settings-panel { width: 280px; box-sizing: border-box; }
 
   .particle { position: fixed; pointer-events: none; z-index: 999; border-radius: 50%; will-change: transform, opacity; }
 
@@ -314,6 +315,33 @@
         <span class="sub">Computer vs Computer</span>
       </button>
     </div>
+    <div id="settings-panel" class="panel-box ai-modules">
+      <div class="mod-grid">
+        <span class="label">AI:</span>
+        <label><input type="checkbox" id="mod-mate" checked> Mate</label>
+        <label><input type="checkbox" id="mod-material" checked> Material</label>
+        <label><input type="checkbox" id="mod-centre" checked> Centre</label>
+        <label><input type="checkbox" id="mod-passed-pawns" checked> Passed pawns</label>
+        <label><input type="checkbox" id="mod-draw-penalty" checked> Draw avoid</label>
+      </div>
+      <div class="controls-row">
+        <div class="depth-control">
+          <span class="label">Depth:</span>
+          <input type="range" id="depth-slider" min="1" max="3" value="2">
+          <span class="depth-val" id="depth-val">2</span>
+        </div>
+        <div class="depth-control">
+          <span class="label">Pieces:</span>
+          <select id="piece-set-select">
+            <option value="cburnett" selected>Cburnett</option>
+            <option value="staunty">Staunty</option>
+            <option value="merida">Merida</option>
+            <option value="classic">Classic</option>
+            <option value="filled">Filled</option>
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="game-area" style="display:none;">
@@ -355,34 +383,6 @@
           <span class="eval-total" id="eval-total">0.0</span>
         </div>
         <div class="eval-bars" id="eval-bars"></div>
-      </div>
-
-      <div class="panel-box ai-modules">
-        <div class="mod-grid">
-          <span class="label">AI:</span>
-          <label><input type="checkbox" id="mod-mate" checked> Mate</label>
-          <label><input type="checkbox" id="mod-material" checked> Material</label>
-          <label><input type="checkbox" id="mod-centre" checked> Centre</label>
-          <label><input type="checkbox" id="mod-passed-pawns" checked> Passed pawns</label>
-          <label><input type="checkbox" id="mod-draw-penalty" checked> Draw avoid</label>
-        </div>
-        <div class="controls-row">
-          <div class="depth-control">
-            <span class="label">Depth:</span>
-            <input type="range" id="depth-slider" min="1" max="3" value="2">
-            <span class="depth-val" id="depth-val">2</span>
-          </div>
-          <div class="depth-control">
-            <span class="label">Pieces:</span>
-            <select id="piece-set-select">
-              <option value="cburnett" selected>Cburnett</option>
-              <option value="staunty">Staunty</option>
-              <option value="merida">Merida</option>
-              <option value="classic">Classic</option>
-              <option value="filled">Filled</option>
-            </select>
-          </div>
-        </div>
       </div>
 
       <div class="panel-box debug-log" id="debug-log"></div>
@@ -576,6 +576,10 @@ function startGame(mode) {
   game = new Game();
   moveNumber = 0;
   document.getElementById('debug-log').innerHTML = '';
+  // Move settings panel from start menu into game side panel
+  const settings = document.getElementById('settings-panel');
+  const debugLog = document.getElementById('debug-log');
+  debugLog.parentNode.insertBefore(settings, debugLog);
   document.getElementById('start-menu').style.display = 'none';
   document.getElementById('game-area').style.display = '';
   buildBoard();
@@ -1303,6 +1307,8 @@ function hidePromotionModal() {
 // --- AI Module Toggles ---
 
 function syncModules() {
+  document.getElementById('depth-val').textContent = document.getElementById('depth-slider').value;
+  if (!game) return;
   game.set_module('mate', document.getElementById('mod-mate').checked);
   game.set_module('material', document.getElementById('mod-material').checked);
   game.set_module('centre', document.getElementById('mod-centre').checked);
@@ -1310,7 +1316,6 @@ function syncModules() {
   game.set_module('draw_penalty', document.getElementById('mod-draw-penalty').checked);
   const depth = parseInt(document.getElementById('depth-slider').value);
   game.set_depth(depth);
-  document.getElementById('depth-val').textContent = depth;
 }
 
 document.getElementById('mod-mate').addEventListener('change', syncModules);
@@ -1364,6 +1369,9 @@ document.getElementById('new-game-btn').addEventListener('click', () => {
   clearSelection();
   aiThinking = false;
   hidePromotionModal();
+  // Move settings panel back to start menu
+  const settings = document.getElementById('settings-panel');
+  document.querySelector('#start-menu .menu-buttons').after(settings);
   document.getElementById('game-area').style.display = 'none';
   document.getElementById('start-menu').style.display = '';
 });

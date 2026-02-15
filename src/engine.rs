@@ -57,6 +57,10 @@ pub struct Weights {
     /// Linear bonus per rank advanced for non-passed pawns (currently 0 = disabled).
     pub pawn_advance: f64,
 
+    // --- Mate / check module ---
+    /// Penalty applied to the side currently in check (but not mated).
+    pub check_penalty: f64,
+
     // --- Draw avoidance module ---
     /// Flat penalty applied when the current position has been seen before.
     pub repeat_penalty: f64,
@@ -71,6 +75,7 @@ impl Default for Weights {
             passed_pawn_base: 0.2,
             passed_pawn_quadratic: 0.3,
             pawn_advance: 0.0,
+            check_penalty: 0.5,
             repeat_penalty: 10.0,
         }
     }
@@ -173,7 +178,7 @@ pub fn evaluate(board: &Board, ai_color: Color, config: &AiConfig) -> f64 {
     let mut score = 0.0;
 
     if config.mate_module {
-        score += eval_mate(board);
+        score += eval_mate(board, &config.weights);
     }
     if config.material_module {
         score += eval_material(board);
@@ -208,7 +213,7 @@ pub struct EvalBreakdown {
 
 pub fn evaluate_breakdown(board: &Board, ai_color: Color, config: &AiConfig) -> EvalBreakdown {
     let flip = if ai_color == Color::Black { -1.0 } else { 1.0 };
-    let mate = if config.mate_module { eval_mate(board) * flip } else { 0.0 };
+    let mate = if config.mate_module { eval_mate(board, &config.weights) * flip } else { 0.0 };
     let material = if config.material_module { eval_material(board) * flip } else { 0.0 };
     let centre = if config.centre_module { eval_centre_control(board, &config.weights) * flip } else { 0.0 };
     let passed_pawns = if config.passed_pawn_module { eval_passed_pawns(board, &config.weights) * flip } else { 0.0 };
@@ -260,7 +265,7 @@ fn eval_centre_control(board: &Board, w: &Weights) -> f64 {
 
 /// Mate and check detection: assigns extreme scores to checkmate, a large
 /// penalty to stalemate (draw), and a smaller penalty for being in check.
-fn eval_mate(board: &Board) -> f64 {
+fn eval_mate(board: &Board, w: &Weights) -> f64 {
     let in_check = board.is_in_check(board.current_turn);
     let no_moves = board.game_over || board.generate_legal_moves(board.current_turn).is_empty();
 
@@ -272,7 +277,7 @@ fn eval_mate(board: &Board) -> f64 {
         0.0
     } else if in_check {
         // In check but can escape — slight penalty for the checked side
-        if board.current_turn == Color::White { -0.5 } else { 0.5 }
+        if board.current_turn == Color::White { -w.check_penalty } else { w.check_penalty }
     } else {
         0.0
     }

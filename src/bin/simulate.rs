@@ -1,9 +1,12 @@
+use std::io::Write;
 use chess::board::Board;
 use chess::engine::{pick_move, AiConfig, Weights};
 
 const MAX_MOVES: u32 = 150;
-const GAMES_PER_MATCHUP: usize = 10;
+const GAMES_PER_MATCHUP: usize = 20;
 const SIM_DEPTH: u32 = 1;
+const PHASE2_DEPTH: u32 = 2;
+const PHASE2_GAMES: usize = 10;
 
 #[derive(Debug)]
 struct MatchResult {
@@ -46,6 +49,16 @@ fn run_matchup(
     label_b: &str,
     config_b: &AiConfig,
 ) -> MatchResult {
+    run_matchup_n(label_a, config_a, label_b, config_b, GAMES_PER_MATCHUP)
+}
+
+fn run_matchup_n(
+    label_a: &str,
+    config_a: &AiConfig,
+    label_b: &str,
+    config_b: &AiConfig,
+    num_games: usize,
+) -> MatchResult {
     let mut result = MatchResult {
         white_wins: 0,
         black_wins: 0,
@@ -53,7 +66,7 @@ fn run_matchup(
     };
 
     // Each config plays both colors
-    let half = GAMES_PER_MATCHUP / 2;
+    let half = num_games / 2;
 
     // A as white, B as black
     for _ in 0..half {
@@ -86,8 +99,9 @@ fn run_matchup(
     let total_draws = draws_1 + result2.draws;
 
     println!(
-        "  {label_a} vs {label_b}: {label_a} wins {a_total_wins}, {label_b} wins {b_total_wins}, draws {total_draws} (out of {GAMES_PER_MATCHUP})"
+        "  {label_a} vs {label_b}: {label_a} wins {a_total_wins}, {label_b} wins {b_total_wins}, draws {total_draws} (out of {num_games})"
     );
+    std::io::stdout().flush().ok();
 
     MatchResult {
         white_wins: a_total_wins,
@@ -131,6 +145,12 @@ fn main() {
         ("pawn_adv=0.0", make_config(|w| w.pawn_advance = 0.0)),
         ("pawn_adv=0.1", make_config(|w| w.pawn_advance = 0.1)),
         ("pawn_adv=0.2", make_config(|w| w.pawn_advance = 0.2)),
+        // Check penalty
+        ("chk_pen=0.0", make_config(|w| w.check_penalty = 0.0)),
+        ("chk_pen=0.3", make_config(|w| w.check_penalty = 0.3)),
+        ("chk_pen=0.5", make_config(|w| w.check_penalty = 0.5)),
+        ("chk_pen=1.0", make_config(|w| w.check_penalty = 1.0)),
+        ("chk_pen=2.0", make_config(|w| w.check_penalty = 2.0)),
         // Repeat penalty
         ("rep_pen=0.5", make_config(|w| w.repeat_penalty = 0.5)),
         ("rep_pen=1.0", make_config(|w| w.repeat_penalty = 1.0)),
@@ -176,6 +196,7 @@ fn main() {
         ("pp_base", vec!["pp_base=0.2", "pp_base=0.8", "pp_base=1.2"]),
         ("pp_quad", vec!["pp_quad=0.08", "pp_quad=0.3", "pp_quad=0.5"]),
         ("pawn_adv", vec!["pawn_adv=0.0", "pawn_adv=0.1", "pawn_adv=0.2"]),
+        ("chk_pen", vec!["chk_pen=0.0", "chk_pen=0.3", "chk_pen=0.5", "chk_pen=1.0", "chk_pen=2.0"]),
         ("rep_pen", vec!["rep_pen=0.5", "rep_pen=1.0", "rep_pen=3.0"]),
     ];
 
@@ -204,13 +225,18 @@ fn main() {
     }
 
     let mut combined = AiConfig::new();
-    combined.depth = SIM_DEPTH;
+    combined.depth = PHASE2_DEPTH;
+    combined.auto_deepen = false;
     combined.weights = best_weights.clone();
 
-    println!("\n  Combined weights: {best_weights:?}");
-    println!("\n  Testing combined vs baseline...\n");
+    let mut baseline_d2 = AiConfig::new();
+    baseline_d2.depth = PHASE2_DEPTH;
+    baseline_d2.auto_deepen = false;
 
-    let result = run_matchup("combined", &combined, "baseline", &baseline);
+    println!("\n  Combined weights: {best_weights:?}");
+    println!("\n  Testing combined vs baseline at depth {PHASE2_DEPTH} ({PHASE2_GAMES} games)...\n");
+
+    let result = run_matchup_n("combined", &combined, "baseline", &baseline_d2, PHASE2_GAMES);
 
     println!("\n--- Final Result ---\n");
     println!(
@@ -234,6 +260,7 @@ fn main() {
     println!("  passed_pawn_base: {}", best_weights.passed_pawn_base);
     println!("  passed_pawn_quadratic: {}", best_weights.passed_pawn_quadratic);
     println!("  pawn_advance: {}", best_weights.pawn_advance);
+    println!("  check_penalty: {}", best_weights.check_penalty);
     println!("  repeat_penalty: {}", best_weights.repeat_penalty);
 }
 
@@ -265,6 +292,11 @@ fn apply_weight(weights: &mut Weights, label: &str) {
         "pawn_adv=0.0" => weights.pawn_advance = 0.0,
         "pawn_adv=0.1" => weights.pawn_advance = 0.1,
         "pawn_adv=0.2" => weights.pawn_advance = 0.2,
+        "chk_pen=0.0" => weights.check_penalty = 0.0,
+        "chk_pen=0.3" => weights.check_penalty = 0.3,
+        "chk_pen=0.5" => weights.check_penalty = 0.5,
+        "chk_pen=1.0" => weights.check_penalty = 1.0,
+        "chk_pen=2.0" => weights.check_penalty = 2.0,
         "rep_pen=0.5" => weights.repeat_penalty = 0.5,
         "rep_pen=1.0" => weights.repeat_penalty = 1.0,
         "rep_pen=3.0" => weights.repeat_penalty = 3.0,
