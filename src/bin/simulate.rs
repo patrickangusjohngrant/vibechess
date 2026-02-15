@@ -4,8 +4,6 @@ use chess::engine::{pick_move, AiConfig, Weights};
 
 const MAX_MOVES: u32 = 150;
 const GAMES_PER_MATCHUP: usize = 20;
-const SIM_DEPTH: u32 = 1;
-const PHASE2_DEPTH: u32 = 2;
 const PHASE2_GAMES: usize = 10;
 
 #[derive(Debug)]
@@ -65,7 +63,6 @@ fn run_matchup_n(
         draws: 0,
     };
 
-    // Each config plays both colors
     let half = num_games / 2;
 
     // A as white, B as black
@@ -110,37 +107,50 @@ fn run_matchup_n(
     }
 }
 
-fn main() {
-    println!("=== Chess AI Weight Optimization ===");
-    println!("Games per matchup: {GAMES_PER_MATCHUP}, max moves per game: {MAX_MOVES}, depth: {SIM_DEPTH}\n");
+/// Medium difficulty baseline: depth 1, auto-deepen to 25k
+fn medium_config() -> AiConfig {
+    let mut c = AiConfig::new();
+    c.depth = 1;
+    c.auto_deepen = true;
+    c.min_evals = 25_000;
+    c
+}
 
-    let mut baseline = AiConfig::new();
-    baseline.depth = SIM_DEPTH;
-    baseline.auto_deepen = false;
+fn make_config(f: impl FnOnce(&mut Weights)) -> AiConfig {
+    let mut config = medium_config();
+    f(&mut config.weights);
+    config
+}
+
+fn main() {
+    println!("=== Chess AI Weight Optimization (medium: d1 auto-deepen 25k) ===");
+    println!("Games per matchup: {GAMES_PER_MATCHUP}, max moves per game: {MAX_MOVES}\n");
+
+    let baseline = medium_config();
 
     // Weight variations to test
     let variations: Vec<(&str, AiConfig)> = vec![
         ("baseline", baseline.clone()),
         // Centre attack weight
-        ("centre_atk=0.15", make_config(|w| w.centre_attack = 0.15)),
+        ("centre_atk=0.05", make_config(|w| w.centre_attack = 0.05)),
+        ("centre_atk=0.3", make_config(|w| w.centre_attack = 0.3)),
         ("centre_atk=0.5", make_config(|w| w.centre_attack = 0.5)),
-        ("centre_atk=0.7", make_config(|w| w.centre_attack = 0.7)),
         // Centre occupy weight
-        ("centre_occ=0.2", make_config(|w| w.centre_occupy = 0.2)),
-        ("centre_occ=0.6", make_config(|w| w.centre_occupy = 0.6)),
+        ("centre_occ=0.1", make_config(|w| w.centre_occupy = 0.1)),
+        ("centre_occ=0.4", make_config(|w| w.centre_occupy = 0.4)),
         ("centre_occ=0.8", make_config(|w| w.centre_occupy = 0.8)),
         // Extended centre
-        ("ext_centre=0.0", make_config(|w| w.extended_centre_attack = 0.0)),
+        ("ext_centre=0.1", make_config(|w| w.extended_centre_attack = 0.1)),
         ("ext_centre=0.2", make_config(|w| w.extended_centre_attack = 0.2)),
-        ("ext_centre=0.3", make_config(|w| w.extended_centre_attack = 0.3)),
+        ("ext_centre=0.5", make_config(|w| w.extended_centre_attack = 0.5)),
         // Passed pawn base
-        ("pp_base=0.2", make_config(|w| w.passed_pawn_base = 0.2)),
-        ("pp_base=0.8", make_config(|w| w.passed_pawn_base = 0.8)),
-        ("pp_base=1.2", make_config(|w| w.passed_pawn_base = 1.2)),
+        ("pp_base=0.1", make_config(|w| w.passed_pawn_base = 0.1)),
+        ("pp_base=0.5", make_config(|w| w.passed_pawn_base = 0.5)),
+        ("pp_base=1.0", make_config(|w| w.passed_pawn_base = 1.0)),
         // Passed pawn quadratic
-        ("pp_quad=0.08", make_config(|w| w.passed_pawn_quadratic = 0.08)),
-        ("pp_quad=0.3", make_config(|w| w.passed_pawn_quadratic = 0.3)),
+        ("pp_quad=0.1", make_config(|w| w.passed_pawn_quadratic = 0.1)),
         ("pp_quad=0.5", make_config(|w| w.passed_pawn_quadratic = 0.5)),
+        ("pp_quad=0.8", make_config(|w| w.passed_pawn_quadratic = 0.8)),
         // Pawn advance
         ("pawn_adv=0.0", make_config(|w| w.pawn_advance = 0.0)),
         ("pawn_adv=0.1", make_config(|w| w.pawn_advance = 0.1)),
@@ -148,13 +158,21 @@ fn main() {
         // Check penalty
         ("chk_pen=0.0", make_config(|w| w.check_penalty = 0.0)),
         ("chk_pen=0.3", make_config(|w| w.check_penalty = 0.3)),
-        ("chk_pen=0.5", make_config(|w| w.check_penalty = 0.5)),
         ("chk_pen=1.0", make_config(|w| w.check_penalty = 1.0)),
         ("chk_pen=2.0", make_config(|w| w.check_penalty = 2.0)),
         // Repeat penalty
         ("rep_pen=0.5", make_config(|w| w.repeat_penalty = 0.5)),
-        ("rep_pen=1.0", make_config(|w| w.repeat_penalty = 1.0)),
-        ("rep_pen=3.0", make_config(|w| w.repeat_penalty = 3.0)),
+        ("rep_pen=5.0", make_config(|w| w.repeat_penalty = 5.0)),
+        ("rep_pen=20.0", make_config(|w| w.repeat_penalty = 20.0)),
+        // Early queen centre multiplier
+        ("eq_mult=0.0", make_config(|w| w.early_queen_centre_mult = 0.0)),
+        ("eq_mult=0.5", make_config(|w| w.early_queen_centre_mult = 0.5)),
+        ("eq_mult=0.8", make_config(|w| w.early_queen_centre_mult = 0.8)),
+        ("eq_mult=1.0", make_config(|w| w.early_queen_centre_mult = 1.0)),
+        // Early queen until move N
+        ("eq_until=5", make_config(|w| w.early_queen_centre_until = 5)),
+        ("eq_until=8", make_config(|w| w.early_queen_centre_until = 8)),
+        ("eq_until=15", make_config(|w| w.early_queen_centre_until = 15)),
     ];
 
     // Phase 1: test each variation against the baseline
@@ -166,7 +184,6 @@ fn main() {
             continue;
         }
         let result = run_matchup(label, config, "baseline", &baseline);
-        // Score: +1 per win, -1 per loss
         let net = result.white_wins as i32 - result.black_wins as i32;
         scores.push((label, net));
     }
@@ -188,16 +205,17 @@ fn main() {
     // Phase 2: combine the best from each category and test
     println!("\n--- Phase 2: Combined best weights ---\n");
 
-    // Find the best for each weight parameter
     let categories = [
-        ("centre_atk", vec!["centre_atk=0.15", "centre_atk=0.5", "centre_atk=0.7"]),
-        ("centre_occ", vec!["centre_occ=0.2", "centre_occ=0.6", "centre_occ=0.8"]),
-        ("ext_centre", vec!["ext_centre=0.0", "ext_centre=0.2", "ext_centre=0.3"]),
-        ("pp_base", vec!["pp_base=0.2", "pp_base=0.8", "pp_base=1.2"]),
-        ("pp_quad", vec!["pp_quad=0.08", "pp_quad=0.3", "pp_quad=0.5"]),
+        ("centre_atk", vec!["centre_atk=0.05", "centre_atk=0.3", "centre_atk=0.5"]),
+        ("centre_occ", vec!["centre_occ=0.1", "centre_occ=0.4", "centre_occ=0.8"]),
+        ("ext_centre", vec!["ext_centre=0.1", "ext_centre=0.2", "ext_centre=0.5"]),
+        ("pp_base", vec!["pp_base=0.1", "pp_base=0.5", "pp_base=1.0"]),
+        ("pp_quad", vec!["pp_quad=0.1", "pp_quad=0.5", "pp_quad=0.8"]),
         ("pawn_adv", vec!["pawn_adv=0.0", "pawn_adv=0.1", "pawn_adv=0.2"]),
-        ("chk_pen", vec!["chk_pen=0.0", "chk_pen=0.3", "chk_pen=0.5", "chk_pen=1.0", "chk_pen=2.0"]),
-        ("rep_pen", vec!["rep_pen=0.5", "rep_pen=1.0", "rep_pen=3.0"]),
+        ("chk_pen", vec!["chk_pen=0.0", "chk_pen=0.3", "chk_pen=1.0", "chk_pen=2.0"]),
+        ("rep_pen", vec!["rep_pen=0.5", "rep_pen=5.0", "rep_pen=20.0"]),
+        ("eq_mult", vec!["eq_mult=0.0", "eq_mult=0.5", "eq_mult=0.8", "eq_mult=1.0"]),
+        ("eq_until", vec!["eq_until=5", "eq_until=8", "eq_until=15"]),
     ];
 
     let mut best_weights = Weights::default();
@@ -217,26 +235,21 @@ fn main() {
 
         if best_label != "baseline" {
             println!("    {cat}: {best_label} (net {best_net:+})");
-            // Apply the best weight
             apply_weight(&mut best_weights, best_label);
         } else {
             println!("    {cat}: baseline (no improvement found)");
         }
     }
 
-    let mut combined = AiConfig::new();
-    combined.depth = PHASE2_DEPTH;
-    combined.auto_deepen = false;
+    let mut combined = medium_config();
     combined.weights = best_weights.clone();
 
-    let mut baseline_d2 = AiConfig::new();
-    baseline_d2.depth = PHASE2_DEPTH;
-    baseline_d2.auto_deepen = false;
+    let baseline_p2 = medium_config();
 
     println!("\n  Combined weights: {best_weights:?}");
-    println!("\n  Testing combined vs baseline at depth {PHASE2_DEPTH} ({PHASE2_GAMES} games)...\n");
+    println!("\n  Testing combined vs baseline ({PHASE2_GAMES} games)...\n");
 
-    let result = run_matchup_n("combined", &combined, "baseline", &baseline_d2, PHASE2_GAMES);
+    let result = run_matchup_n("combined", &combined, "baseline", &baseline_p2, PHASE2_GAMES);
 
     println!("\n--- Final Result ---\n");
     println!(
@@ -261,45 +274,45 @@ fn main() {
     println!("  passed_pawn_quadratic: {}", best_weights.passed_pawn_quadratic);
     println!("  pawn_advance: {}", best_weights.pawn_advance);
     println!("  check_penalty: {}", best_weights.check_penalty);
+    println!("  early_queen_centre_mult: {}", best_weights.early_queen_centre_mult);
+    println!("  early_queen_centre_until: {}", best_weights.early_queen_centre_until);
     println!("  repeat_penalty: {}", best_weights.repeat_penalty);
-}
-
-fn make_config(f: impl FnOnce(&mut Weights)) -> AiConfig {
-    let mut config = AiConfig::new();
-    config.depth = SIM_DEPTH;
-    config.auto_deepen = false;
-    f(&mut config.weights);
-    config
 }
 
 fn apply_weight(weights: &mut Weights, label: &str) {
     match label {
-        "centre_atk=0.15" => weights.centre_attack = 0.15,
+        "centre_atk=0.05" => weights.centre_attack = 0.05,
+        "centre_atk=0.3" => weights.centre_attack = 0.3,
         "centre_atk=0.5" => weights.centre_attack = 0.5,
-        "centre_atk=0.7" => weights.centre_attack = 0.7,
-        "centre_occ=0.2" => weights.centre_occupy = 0.2,
-        "centre_occ=0.6" => weights.centre_occupy = 0.6,
+        "centre_occ=0.1" => weights.centre_occupy = 0.1,
+        "centre_occ=0.4" => weights.centre_occupy = 0.4,
         "centre_occ=0.8" => weights.centre_occupy = 0.8,
-        "ext_centre=0.0" => weights.extended_centre_attack = 0.0,
+        "ext_centre=0.1" => weights.extended_centre_attack = 0.1,
         "ext_centre=0.2" => weights.extended_centre_attack = 0.2,
-        "ext_centre=0.3" => weights.extended_centre_attack = 0.3,
-        "pp_base=0.2" => weights.passed_pawn_base = 0.2,
-        "pp_base=0.8" => weights.passed_pawn_base = 0.8,
-        "pp_base=1.2" => weights.passed_pawn_base = 1.2,
-        "pp_quad=0.08" => weights.passed_pawn_quadratic = 0.08,
-        "pp_quad=0.3" => weights.passed_pawn_quadratic = 0.3,
+        "ext_centre=0.5" => weights.extended_centre_attack = 0.5,
+        "pp_base=0.1" => weights.passed_pawn_base = 0.1,
+        "pp_base=0.5" => weights.passed_pawn_base = 0.5,
+        "pp_base=1.0" => weights.passed_pawn_base = 1.0,
+        "pp_quad=0.1" => weights.passed_pawn_quadratic = 0.1,
         "pp_quad=0.5" => weights.passed_pawn_quadratic = 0.5,
+        "pp_quad=0.8" => weights.passed_pawn_quadratic = 0.8,
         "pawn_adv=0.0" => weights.pawn_advance = 0.0,
         "pawn_adv=0.1" => weights.pawn_advance = 0.1,
         "pawn_adv=0.2" => weights.pawn_advance = 0.2,
         "chk_pen=0.0" => weights.check_penalty = 0.0,
         "chk_pen=0.3" => weights.check_penalty = 0.3,
-        "chk_pen=0.5" => weights.check_penalty = 0.5,
         "chk_pen=1.0" => weights.check_penalty = 1.0,
         "chk_pen=2.0" => weights.check_penalty = 2.0,
         "rep_pen=0.5" => weights.repeat_penalty = 0.5,
-        "rep_pen=1.0" => weights.repeat_penalty = 1.0,
-        "rep_pen=3.0" => weights.repeat_penalty = 3.0,
+        "rep_pen=5.0" => weights.repeat_penalty = 5.0,
+        "rep_pen=20.0" => weights.repeat_penalty = 20.0,
+        "eq_mult=0.0" => weights.early_queen_centre_mult = 0.0,
+        "eq_mult=0.5" => weights.early_queen_centre_mult = 0.5,
+        "eq_mult=0.8" => weights.early_queen_centre_mult = 0.8,
+        "eq_mult=1.0" => weights.early_queen_centre_mult = 1.0,
+        "eq_until=5" => weights.early_queen_centre_until = 5,
+        "eq_until=8" => weights.early_queen_centre_until = 8,
+        "eq_until=15" => weights.early_queen_centre_until = 15,
         _ => {}
     }
 }
