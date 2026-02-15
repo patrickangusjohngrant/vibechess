@@ -258,17 +258,21 @@ fn eval_centre_control(board: &Board, w: &Weights) -> f64 {
     score
 }
 
-/// Mate detection: assigns extreme scores to terminal positions.
-/// - White checkmated: -10000 (worst for White)
-/// - Black checkmated: +10000 (best for White)
-/// - Stalemate (draw):      0 (neutral)
+/// Mate and check detection: assigns extreme scores to checkmate, a large
+/// penalty to stalemate (draw), and a smaller penalty for being in check.
 fn eval_mate(board: &Board) -> f64 {
-    if !board.game_over {
-        return 0.0;
-    }
-    if board.is_in_check(board.current_turn) {
-        // The side to move is checkmated
+    let in_check = board.is_in_check(board.current_turn);
+    let no_moves = board.game_over || board.generate_legal_moves(board.current_turn).is_empty();
+
+    if no_moves && in_check {
+        // Checkmate — the side to move has lost
         if board.current_turn == Color::White { -10000.0 } else { 10000.0 }
+    } else if no_moves {
+        // Stalemate — a draw
+        0.0
+    } else if in_check {
+        // In check but can escape — slight penalty for the checked side
+        if board.current_turn == Color::White { -0.5 } else { 0.5 }
     } else {
         0.0
     }
