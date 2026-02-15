@@ -686,11 +686,12 @@ function buildBoard() {
 
 function checkForCapture(oldState, newState) {
   if (!oldState || !newState || !newState.last_move) return;
-  const oldTotal = (oldState.captured_white?.length || 0) + (oldState.captured_black?.length || 0);
-  const newTotal = (newState.captured_white?.length || 0) + (newState.captured_black?.length || 0);
-  if (newTotal <= oldTotal) return;
-
   const [from, to] = newState.last_move;
+
+  // Check if the target square had an enemy piece in the old state
+  const victim = oldState.squares[to[0]][to[1]];
+  if (!victim) return;
+
   const toSq = document.querySelector(`.square[data-row="${to[0]}"][data-col="${to[1]}"]`);
   if (!toSq) return;
 
@@ -698,40 +699,58 @@ function checkForCapture(oldState, newState) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   const dirX = to[1] - from[1];
-  const dirY = -(to[0] - from[0]); // screen Y is inverted
+  const dirY = -(to[0] - from[0]);
   spawnExplosion(cx, cy, dirX, dirY);
 }
 
 function spawnExplosion(cx, cy, dirX, dirY) {
-  const count = 18;
-  const colors = ['#f39c12', '#e74c3c', '#f1c40f', '#e67e22', '#fff', '#d35400'];
+  const colors = ['#f39c12', '#e74c3c', '#f1c40f', '#e67e22', '#fff', '#d35400', '#ff6b6b', '#ffaa00'];
   const dirAngle = Math.atan2(dirY, dirX);
 
-  for (let i = 0; i < count; i++) {
+  // Main directional burst
+  for (let i = 0; i < 35; i++) {
     const p = document.createElement('div');
     p.className = 'particle';
-    const size = 4 + Math.random() * 6;
+    const size = 5 + Math.random() * 10;
     p.style.width = size + 'px';
     p.style.height = size + 'px';
     p.style.background = colors[Math.floor(Math.random() * colors.length)];
     p.style.left = cx + 'px';
     p.style.top = cy + 'px';
 
-    const spread = (Math.random() - 0.5) * Math.PI * 1.2;
+    const spread = (Math.random() - 0.5) * Math.PI * 1.6;
     const angle = dirAngle + spread;
-    const speed = 60 + Math.random() * 120;
+    const speed = 120 + Math.random() * 280;
     const vx = Math.cos(angle) * speed;
     const vy = Math.sin(angle) * speed;
 
     document.body.appendChild(p);
     animateParticle(p, cx, cy, vx, vy);
   }
+
+  // Secondary ring burst (delayed)
+  setTimeout(() => {
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = 3 + Math.random() * 6;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.background = colors[Math.floor(Math.random() * colors.length)];
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 60 + Math.random() * 150;
+      document.body.appendChild(p);
+      animateParticle(p, cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
+    }
+  }, 50);
 }
 
 function animateParticle(el, x, y, vx, vy) {
-  const duration = 400 + Math.random() * 200;
+  const duration = 500 + Math.random() * 300;
   const start = performance.now();
-  const gravity = 200;
+  const gravity = 250;
 
   function tick(now) {
     const t = (now - start) / 1000;
@@ -740,8 +759,8 @@ function animateParticle(el, x, y, vx, vy) {
 
     const px = x + vx * t;
     const py = y + vy * t + 0.5 * gravity * t * t;
-    const opacity = Math.max(0, 1 - progress * 2.5);
-    const scale = 1 - progress;
+    const opacity = Math.max(0, 1 - progress * 2);
+    const scale = (1 - progress * 0.7);
 
     el.style.left = px + 'px';
     el.style.top = py + 'px';
@@ -796,50 +815,69 @@ function playEndAnimation() {
 }
 
 function spawnBigExplosion(cx, cy) {
-  // --- Initial burst ---
-  const burstColors = ['#e74c3c', '#f39c12', '#f1c40f', '#fff', '#ff6b6b'];
-  for (let i = 0; i < 30; i++) {
+  const burstColors = ['#e74c3c', '#f39c12', '#f1c40f', '#fff', '#ff6b6b', '#ffaa00', '#ff4444'];
+
+  // --- Wave 1: massive radial burst ---
+  for (let i = 0; i < 60; i++) {
     const p = document.createElement('div');
     p.className = 'particle';
-    const size = 4 + Math.random() * 8;
+    const size = 6 + Math.random() * 14;
     p.style.width = size + 'px';
     p.style.height = size + 'px';
     p.style.background = burstColors[Math.floor(Math.random() * burstColors.length)];
     p.style.left = cx + 'px';
     p.style.top = cy + 'px';
     const angle = Math.random() * Math.PI * 2;
-    const speed = 100 + Math.random() * 250;
+    const speed = 150 + Math.random() * 350;
     document.body.appendChild(p);
     animateParticle(p, cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
   }
 
-  // --- Mushroom stem: particles rising up from the base ---
-  const stemColors = ['#e67e22', '#d35400', '#c0392b', '#f39c12', '#aaa'];
-  for (let i = 0; i < 20; i++) {
+  // --- Wave 2: secondary burst ---
+  setTimeout(() => {
+    for (let i = 0; i < 30; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = 4 + Math.random() * 10;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.background = burstColors[Math.floor(Math.random() * burstColors.length)];
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 80 + Math.random() * 200;
+      document.body.appendChild(p);
+      animateParticle(p, cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
+    }
+  }, 100);
+
+  // --- Mushroom stem: dense column rising from the blast ---
+  const stemColors = ['#e67e22', '#d35400', '#c0392b', '#f39c12', '#888', '#ff6b6b'];
+  for (let i = 0; i < 40; i++) {
     setTimeout(() => {
       const p = document.createElement('div');
       p.className = 'particle';
-      const size = 6 + Math.random() * 8;
+      const size = 8 + Math.random() * 12;
       p.style.width = size + 'px';
       p.style.height = size + 'px';
       p.style.background = stemColors[Math.floor(Math.random() * stemColors.length)];
       p.style.left = cx + 'px';
       p.style.top = cy + 'px';
       document.body.appendChild(p);
-      const vx = (Math.random() - 0.5) * 30;
-      const vy = -(150 + Math.random() * 100);
-      animateMushroomParticle(p, cx, cy, vx, vy, 800 + Math.random() * 400);
-    }, i * 20);
+      const vx = (Math.random() - 0.5) * 40;
+      const vy = -(200 + Math.random() * 150);
+      animateMushroomParticle(p, cx, cy, vx, vy, 1000 + Math.random() * 500);
+    }, i * 15);
   }
 
-  // --- Mushroom cap: ring of particles expanding at the top ---
+  // --- Mushroom cap: big expanding ring at the top ---
   setTimeout(() => {
-    const capColors = ['#e74c3c', '#c0392b', '#f1c40f', '#ff6b6b', '#fff', '#f39c12'];
-    const capY = cy - 120;
-    for (let i = 0; i < 30; i++) {
+    const capColors = ['#e74c3c', '#c0392b', '#f1c40f', '#ff6b6b', '#fff', '#f39c12', '#ffaa00'];
+    const capY = cy - 180;
+    for (let i = 0; i < 50; i++) {
       const p = document.createElement('div');
       p.className = 'particle';
-      const size = 6 + Math.random() * 12;
+      const size = 8 + Math.random() * 16;
       p.style.width = size + 'px';
       p.style.height = size + 'px';
       p.style.background = capColors[Math.floor(Math.random() * capColors.length)];
@@ -847,10 +885,46 @@ function spawnBigExplosion(cx, cy) {
       p.style.top = capY + 'px';
       document.body.appendChild(p);
       const angle = Math.random() * Math.PI * 2;
-      const speed = 40 + Math.random() * 100;
-      animateMushroomParticle(p, cx, capY, Math.cos(angle) * speed, Math.sin(angle) * speed * 0.5 - 20, 600 + Math.random() * 400);
+      const speed = 60 + Math.random() * 160;
+      animateMushroomParticle(p, cx, capY, Math.cos(angle) * speed, Math.sin(angle) * speed * 0.4 - 30, 800 + Math.random() * 500);
     }
-  }, 300);
+  }, 350);
+
+  // --- Shockwave ring ---
+  setTimeout(() => {
+    const ring = document.createElement('div');
+    ring.className = 'particle';
+    ring.style.width = '10px';
+    ring.style.height = '10px';
+    ring.style.background = 'transparent';
+    ring.style.border = '3px solid rgba(255, 200, 50, 0.8)';
+    ring.style.left = cx + 'px';
+    ring.style.top = cy + 'px';
+    document.body.appendChild(ring);
+    animateShockwave(ring, cx, cy);
+  }, 50);
+}
+
+function animateShockwave(el, cx, cy) {
+  const duration = 600;
+  const start = performance.now();
+
+  function tick(now) {
+    const progress = (now - start) / duration;
+    if (progress >= 1) { el.remove(); return; }
+
+    const size = 10 + progress * 300;
+    const opacity = Math.max(0, 1 - progress * 1.5);
+
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.left = cx + 'px';
+    el.style.top = cy + 'px';
+    el.style.opacity = opacity;
+    el.style.transform = `translate(-50%, -50%)`;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
 function animateMushroomParticle(el, x, y, vx, vy, duration) {
@@ -863,8 +937,8 @@ function animateMushroomParticle(el, x, y, vx, vy, duration) {
 
     const px = x + vx * t;
     const py = y + vy * t;
-    const opacity = Math.max(0, 1 - progress * 1.8);
-    const scale = 1 + progress * 0.5;
+    const opacity = Math.max(0, 1 - progress * 1.5);
+    const scale = 1 + progress;
 
     el.style.left = px + 'px';
     el.style.top = py + 'px';
