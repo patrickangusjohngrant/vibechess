@@ -3,7 +3,7 @@ use chess::board::Board;
 use chess::engine::{pick_move, AiConfig, Weights};
 
 const MAX_MOVES: u32 = 150;
-const GAMES_PER_MATCHUP: usize = 20;
+const GAMES_PER_MATCHUP: usize = 10;
 const PHASE2_GAMES: usize = 10;
 
 #[derive(Debug)]
@@ -107,12 +107,13 @@ fn run_matchup_n(
     }
 }
 
-/// Medium difficulty baseline: depth 1, auto-deepen to 25k
+/// Simulation baseline: depth 1, no auto-deepen for speed.
+/// Weight results still apply to medium (auto-deepen just deepens the search,
+/// it doesn't change how weights are used).
 fn medium_config() -> AiConfig {
     let mut c = AiConfig::new();
     c.depth = 1;
-    c.auto_deepen = true;
-    c.min_evals = 25_000;
+    c.auto_deepen = false;
     c
 }
 
@@ -183,6 +184,8 @@ fn main() {
         if *label == "baseline" {
             continue;
         }
+        print!("  Testing {label}... ");
+        std::io::stdout().flush().ok();
         let result = run_matchup(label, config, "baseline", &baseline);
         let net = result.white_wins as i32 - result.black_wins as i32;
         scores.push((label, net));

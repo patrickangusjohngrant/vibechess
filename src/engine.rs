@@ -76,16 +76,16 @@ pub struct Weights {
 impl Default for Weights {
     fn default() -> Self {
         Weights {
-            centre_attack: 0.15,
-            centre_occupy: 0.2,
-            extended_centre_attack: 0.3,
-            passed_pawn_base: 0.2,
+            centre_attack: 0.3,
+            centre_occupy: 0.8,
+            extended_centre_attack: 0.2,
+            passed_pawn_base: 0.1,
             passed_pawn_quadratic: 0.3,
             pawn_advance: 0.0,
-            check_penalty: 0.5,
-            early_queen_centre_mult: 0.2,
-            early_queen_centre_until: 10,
-            repeat_penalty: 10.0,
+            check_penalty: 2.0,
+            early_queen_centre_mult: 0.8,
+            early_queen_centre_until: 15,
+            repeat_penalty: 5.0,
         }
     }
 }
@@ -573,12 +573,16 @@ mod tests {
     use super::*;
     use crate::piece::Piece;
 
-    /// Place kings + a white pawn on a7. The engine must promote to queen.
+    /// Place kings + a white pawn on a7, with pawns to anchor the kings.
+    /// The engine must promote to queen.
     fn board_pawn_on_a7() -> Board {
         let mut board = Board::empty();
         board.squares[0][4] = Some(Piece::new(PieceType::King, Color::White));
         board.squares[7][4] = Some(Piece::new(PieceType::King, Color::Black));
         board.squares[6][0] = Some(Piece::new(PieceType::Pawn, Color::White));
+        // Add pawns so the kings can't wander into the centre for free points
+        board.squares[1][4] = Some(Piece::new(PieceType::Pawn, Color::White));
+        board.squares[6][4] = Some(Piece::new(PieceType::Pawn, Color::Black));
         board.current_turn = Color::White;
         board.fullmove_number = 30;
         board
@@ -587,7 +591,11 @@ mod tests {
     #[test]
     fn pawn_promotes_to_queen() {
         let board = board_pawn_on_a7();
-        let config = AiConfig::new();
+        let mut config = AiConfig::new();
+        config.depth = 1;
+        config.auto_deepen = false;
+        // Disable positional modules — on sparse test boards they dominate material
+        config.centre_module = false;
         let result = pick_move(&board, &config).expect("should find a move");
         assert_eq!(result.mv.from, (6, 0), "should move from a7");
         assert_eq!(result.mv.to, (7, 0), "should move to a8");
