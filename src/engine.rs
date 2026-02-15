@@ -92,6 +92,8 @@ pub struct AiConfig {
     pub draw_penalty_module: bool,
     /// Search depth in full moves (1–3). Internally converted to plies (depth×2).
     pub depth: u32,
+    /// When true, automatically increase depth until at least MIN_EVALS evaluations.
+    pub auto_deepen: bool,
     pub weights: Weights,
 }
 
@@ -110,6 +112,7 @@ impl AiConfig {
             passed_pawn_module: true,
             draw_penalty_module: true,
             depth: 2,
+            auto_deepen: true,
             weights: Weights::default(),
         }
     }
@@ -471,8 +474,8 @@ pub fn pick_move(board: &Board, config: &AiConfig) -> Option<PickResult> {
     let mut plies = config.depth * 2;
     let (mut scored, mut evals) = pick_move_at_depth(board, &legal_moves, plies, config);
 
-    // If the search was too shallow, increase depth until we hit MIN_EVALS.
-    while evals < MIN_EVALS && plies < 6 {
+    // If auto-deepen is on and the search was too shallow, increase depth.
+    while config.auto_deepen && evals < MIN_EVALS && plies < 6 {
         plies += 1;
         let (new_scored, new_evals) = pick_move_at_depth(board, &legal_moves, plies, config);
         scored = new_scored;

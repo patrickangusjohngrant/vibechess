@@ -102,6 +102,7 @@ fn main() {
 
     let mut baseline = AiConfig::new();
     baseline.depth = SIM_DEPTH;
+    baseline.auto_deepen = false;
 
     // Weight variations to test
     let variations: Vec<(&str, AiConfig)> = vec![
@@ -239,6 +240,7 @@ fn main() {
 fn make_config(f: impl FnOnce(&mut Weights)) -> AiConfig {
     let mut config = AiConfig::new();
     config.depth = SIM_DEPTH;
+    config.auto_deepen = false;
     f(&mut config.weights);
     config
 }

@@ -229,26 +229,23 @@ fn main() {
     println!();
 
     let configs: Vec<(&str, AiConfig)> = vec![
-        ("d2 mat+centre", {
-            let mut c = AiConfig::new();
-            c.depth = 2;
-            c.passed_pawn_module = false;
-            c
-        }),
-        ("d1 mat+centre", {
-            let mut c = AiConfig::new();
-            c.depth = 1;
-            c.passed_pawn_module = false;
-            c
-        }),
         ("d2 all-on", {
             let mut c = AiConfig::new();
             c.depth = 2;
+            c.auto_deepen = false;
+            c
+        }),
+        ("d2 mat+centre", {
+            let mut c = AiConfig::new();
+            c.depth = 2;
+            c.auto_deepen = false;
+            c.passed_pawn_module = false;
             c
         }),
         ("d1 random", {
             let mut c = AiConfig::new();
             c.depth = 1;
+            c.auto_deepen = false;
             c.mate_module = false;
             c.material_module = false;
             c.centre_module = false;
