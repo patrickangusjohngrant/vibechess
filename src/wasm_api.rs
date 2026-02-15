@@ -126,6 +126,11 @@ pub struct Game {
 }
 
 #[wasm_bindgen]
+pub fn build_timestamp() -> String {
+    env!("BUILD_TIMESTAMP").to_string()
+}
+
+#[wasm_bindgen]
 impl Game {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Game {
@@ -149,7 +154,11 @@ impl Game {
 
     pub fn set_depth(&mut self, depth: u32) {
         self.ai_config.depth = depth.clamp(1, 3);
-        self.ai_config.auto_deepen = false;
+    }
+
+    pub fn set_auto_deepen(&mut self, enabled: bool, min_evals: u64) {
+        self.ai_config.auto_deepen = enabled;
+        self.ai_config.min_evals = min_evals;
     }
 
     pub fn get_board_state(&self) -> JsValue {

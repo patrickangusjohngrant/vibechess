@@ -77,6 +77,13 @@ export class Game {
         return this;
     }
     /**
+     * @param {boolean} enabled
+     * @param {bigint} min_evals
+     */
+    set_auto_deepen(enabled, min_evals) {
+        wasm.game_set_auto_deepen(this.__wbg_ptr, enabled, min_evals);
+    }
+    /**
      * @param {number} depth
      */
     set_depth(depth) {
@@ -93,6 +100,22 @@ export class Game {
     }
 }
 if (Symbol.dispose) Game.prototype[Symbol.dispose] = Game.prototype.free;
+
+/**
+ * @returns {string}
+ */
+export function build_timestamp() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.build_timestamp();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
 
 function __wbg_get_imports() {
     const import0 = {

@@ -97,8 +97,10 @@ pub struct AiConfig {
     pub draw_penalty_module: bool,
     /// Search depth in full moves (1–3). Internally converted to plies (depth×2).
     pub depth: u32,
-    /// When true, automatically increase depth until at least MIN_EVALS evaluations.
+    /// When true, automatically increase depth until at least `min_evals` evaluations.
     pub auto_deepen: bool,
+    /// Minimum number of static evaluations before auto-deepen stops.
+    pub min_evals: u64,
     pub weights: Weights,
 }
 
@@ -118,6 +120,7 @@ impl AiConfig {
             draw_penalty_module: true,
             depth: 2,
             auto_deepen: true,
+            min_evals: 200_000,
             weights: Weights::default(),
         }
     }
@@ -267,19 +270,19 @@ fn eval_centre_control(board: &Board, w: &Weights) -> f64 {
 /// penalty to stalemate (draw), and a smaller penalty for being in check.
 fn eval_mate(board: &Board, w: &Weights) -> f64 {
     let in_check = board.is_in_check(board.current_turn);
+
+    if !in_check {
+        return 0.0;
+    }
+
     let no_moves = board.game_over || board.generate_legal_moves(board.current_turn).is_empty();
 
-    if no_moves && in_check {
+    if no_moves {
         // Checkmate — the side to move has lost
         if board.current_turn == Color::White { -10000.0 } else { 10000.0 }
-    } else if no_moves {
-        // Stalemate — a draw
-        0.0
-    } else if in_check {
+    } else {
         // In check but can escape — slight penalty for the checked side
         if board.current_turn == Color::White { -w.check_penalty } else { w.check_penalty }
-    } else {
-        0.0
     }
 }
 
@@ -414,7 +417,16 @@ fn negamax(
     config: &AiConfig,
     evals: &mut u64,
 ) -> f64 {
-    if depth == 0 || board.game_over {
+    // Terminal: game already decided by apply_move (checkmate, stalemate, etc.)
+    if board.game_over {
+        *evals += 1;
+        if board.is_in_check(board.current_turn) {
+            return -10000.0 - depth as f64;
+        }
+        return 0.0;
+    }
+
+    if depth == 0 {
         *evals += 1;
         return evaluate(board, board.current_turn, config);
     }
@@ -422,7 +434,10 @@ fn negamax(
     let mut legal_moves = board.generate_legal_moves(board.current_turn);
     if legal_moves.is_empty() {
         *evals += 1;
-        return evaluate(board, board.current_turn, config);
+        if board.is_in_check(board.current_turn) {
+            return -10000.0 - depth as f64;
+        }
+        return 0.0;
     }
 
     order_moves(board, &mut legal_moves);
@@ -456,8 +471,6 @@ fn negamax(
 /// Depth is specified in "full moves" (e.g. depth=2 means the AI looks 2 moves
 /// ahead for each side = 4 plies total). The first ply is consumed by applying
 /// each candidate move, so negamax is called with `plies - 1`.
-const MIN_EVALS: u64 = 100_000;
-
 fn pick_move_at_depth(board: &Board, legal_moves: &[Move], plies: u32, config: &AiConfig) -> (Vec<ScoredMove>, u64) {
     let mut evals: u64 = 0;
     let scored: Vec<ScoredMove> = legal_moves
@@ -484,7 +497,7 @@ pub fn pick_move(board: &Board, config: &AiConfig) -> Option<PickResult> {
     let (mut scored, mut evals) = pick_move_at_depth(board, &legal_moves, plies, config);
 
     // If auto-deepen is on and the search was too shallow, increase depth.
-    while config.auto_deepen && evals < MIN_EVALS && plies < 6 {
+    while config.auto_deepen && evals < config.min_evals && plies < 6 {
         plies += 1;
         let (new_scored, new_evals) = pick_move_at_depth(board, &legal_moves, plies, config);
         scored = new_scored;
@@ -626,6 +639,27 @@ mod tests {
         config.depth = 1;
         let result = pick_move(&board, &config).expect("should find a move");
         assert!(result.evals > 0, "should have evaluated at least one position");
+    }
+
+    #[test]
+    fn finds_mate_in_one() {
+        // White: Ke1, Rd1. Black: Kg8, pawns f7 g7 h7.
+        // White to move: Rd8# is mate in 1.
+        let mut board = Board::empty();
+        board.squares[0][4] = Some(Piece::new(PieceType::King, Color::White));  // Ke1
+        board.squares[0][3] = Some(Piece::new(PieceType::Rook, Color::White));  // Rd1
+        board.squares[7][6] = Some(Piece::new(PieceType::King, Color::Black));  // Kg8
+        board.squares[6][5] = Some(Piece::new(PieceType::Pawn, Color::Black));  // f7
+        board.squares[6][6] = Some(Piece::new(PieceType::Pawn, Color::Black));  // g7
+        board.squares[6][7] = Some(Piece::new(PieceType::Pawn, Color::Black));  // h7
+        board.current_turn = Color::White;
+
+        let mut config = AiConfig::new();
+        config.depth = 1;
+        config.auto_deepen = false;
+        let result = pick_move(&board, &config).expect("should find a move");
+        // Rd8# = rook from d1 (row 0, col 3) to d8 (row 7, col 3)
+        assert_eq!(result.mv.to, (7, 3), "should play Rd8# but played {:?} -> {:?}", result.mv.from, result.mv.to);
     }
 
     #[test]

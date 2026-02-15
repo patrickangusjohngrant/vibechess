@@ -194,6 +194,7 @@
   .promo-choice:hover { transform: scale(1.1); border-color: #f7ec59; }
 
   .loading { font-size: 1.2rem; color: #aaa; }
+  .compile-time { position: fixed; bottom: 4px; right: 8px; font-size: 0.6rem; color: #444; }
 
   /* Start menu */
   #start-menu { display: flex; flex-direction: column; align-items: center; gap: 20px; }
@@ -262,6 +263,14 @@
 
   /* AI modules */
   .ai-modules { font-size: 0.78rem; }
+  .difficulty-row { display: flex; gap: 4px; margin-bottom: 6px; }
+  .diff-btn {
+    flex: 1; padding: 5px 0; text-align: center; font-size: 0.75rem; font-weight: 600;
+    background: #0a1a35; border: 1px solid #1a5276; border-radius: 5px;
+    color: #888; cursor: pointer; transition: all 0.15s;
+  }
+  .diff-btn:hover { background: #0f3460; color: #ccc; }
+  .diff-btn.active { background: #0f3460; color: #3498db; border-color: #3498db; }
   .mod-grid { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 5px; }
   .mod-grid .label { font-weight: 600; color: #aaa; }
   .mod-grid label { display: flex; align-items: center; gap: 3px; cursor: pointer; }
@@ -316,20 +325,41 @@
       </button>
     </div>
     <div id="settings-panel" class="panel-box ai-modules">
-      <div class="mod-grid">
-        <span class="label">AI:</span>
-        <label><input type="checkbox" id="mod-mate" checked> Mate</label>
-        <label><input type="checkbox" id="mod-material" checked> Material</label>
-        <label><input type="checkbox" id="mod-centre" checked> Centre</label>
-        <label><input type="checkbox" id="mod-passed-pawns" checked> Passed pawns</label>
-        <label><input type="checkbox" id="mod-draw-penalty" checked> Draw avoid</label>
+      <div class="difficulty-row">
+        <button class="diff-btn" data-diff="easy">Easy</button>
+        <button class="diff-btn active" data-diff="medium">Medium</button>
+        <button class="diff-btn" data-diff="hard">Hard</button>
+        <button class="diff-btn" data-diff="custom">Custom</button>
       </div>
-      <div class="controls-row">
-        <div class="depth-control">
-          <span class="label">Depth:</span>
-          <input type="range" id="depth-slider" min="1" max="3" value="2">
-          <span class="depth-val" id="depth-val">2</span>
+      <div id="custom-ai-controls" style="display:none;">
+        <div class="mod-grid">
+          <span class="label">AI:</span>
+          <label><input type="checkbox" id="mod-mate" checked> Mate</label>
+          <label><input type="checkbox" id="mod-material" checked> Material</label>
+          <label><input type="checkbox" id="mod-centre" checked> Centre</label>
+          <label><input type="checkbox" id="mod-passed-pawns" checked> Passed pawns</label>
+          <label><input type="checkbox" id="mod-draw-penalty" checked> Draw avoid</label>
         </div>
+        <div class="controls-row">
+          <div class="depth-control">
+            <span class="label">Depth:</span>
+            <input type="range" id="depth-slider" min="1" max="3" value="1">
+            <span class="depth-val" id="depth-val">1</span>
+          </div>
+          <div class="depth-control">
+            <label><input type="checkbox" id="mod-auto-deepen" checked> Auto-deepen</label>
+            <span class="label">min:</span>
+            <select id="auto-deepen-min">
+              <option value="50000">50k</option>
+              <option value="100000">100k</option>
+              <option value="200000" selected>200k</option>
+              <option value="500000">500k</option>
+              <option value="1000000">1M</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="controls-row" style="margin-top:5px;">
         <div class="depth-control">
           <span class="label">Pieces:</span>
           <select id="piece-set-select">
@@ -363,8 +393,11 @@
           <button id="hint-2-btn" title="Medium hint (depth 2)">Hint 2</button>
           <button id="hint-3-btn" title="Deep hint (depth 3)">Hint 3</button>
           <button id="new-game-btn">New Game</button>
+          <button id="ai-settings-btn" title="AI Settings">⚙</button>
         </span>
       </div>
+
+      <div id="ingame-settings" style="display:none;"></div>
 
       <div class="panel-box captured-pieces">
         <div class="captured-side">
@@ -401,7 +434,36 @@
 <span id="move-anim"></span>
 
 <script type="module">
-import init, { Game } from './pkg/chess.js?v=2';
+// --- Worker proxy ---
+const worker = new Worker('worker.js', { type: 'module' });
+let _callId = 0;
+const _pending = {};
+let _initResolve;
+const _initReady = new Promise(r => { _initResolve = r; });
+let _buildTimestamp = '';
+
+worker.onmessage = (e) => {
+  const msg = e.data;
+  if (msg.type === 'init') {
+    _buildTimestamp = msg.timestamp;
+    _initResolve();
+    return;
+  }
+  if (msg.type === 'init_error') {
+    _initResolve();
+    return;
+  }
+  const cb = _pending[msg.id];
+  if (cb) { delete _pending[msg.id]; cb(msg.result); }
+};
+
+function callWorker(method, ...args) {
+  return new Promise(resolve => {
+    const id = ++_callId;
+    _pending[id] = resolve;
+    worker.postMessage({ id, method, args });
+  });
+}
 
 // --- Responsive square sizing ---
 function updateSquareSize() {
@@ -503,7 +565,6 @@ function getDragContent(color, pieceType) {
 
 const FILES = ['a','b','c','d','e','f','g','h'];
 
-let game;
 let boardState;
 let selectedSquare = null;   // {row, col}
 let legalMovesForSelected = [];
@@ -513,12 +574,6 @@ let hintMove = null;  // {from: [r,c], to: [r,c]}
 let gameMode = 'white'; // 'white' | 'black' | 'demo'
 let demoTimer = null;
 let moveNumber = 0;
-
-// --- Async AI helpers (yield to browser before heavy computation) ---
-
-function defer() {
-  return new Promise(resolve => setTimeout(resolve, 0));
-}
 
 /// Animate a piece sliding from one square to another. Returns a promise
 /// that resolves when the animation completes.
@@ -566,25 +621,24 @@ function animateMove(fromRow, fromCol, toRow, toCol, color, pieceType) {
 // --- Init ---
 
 async function main() {
-  await init();
+  await _initReady;
   document.getElementById('loading').style.display = 'none';
   document.getElementById('start-menu').style.display = '';
+  document.getElementById('wasm-compile-time').textContent = `build: ${_buildTimestamp}`;
 }
 
-function startGame(mode) {
+async function startGame(mode) {
   gameMode = mode;
-  game = new Game();
+  await callWorker('new_game');
   moveNumber = 0;
   document.getElementById('debug-log').innerHTML = '';
-  // Move settings panel from start menu into game side panel
-  const settings = document.getElementById('settings-panel');
-  const debugLog = document.getElementById('debug-log');
-  debugLog.parentNode.insertBefore(settings, debugLog);
+  // Hide in-game settings by default
+  document.getElementById('ingame-settings').style.display = 'none';
   document.getElementById('start-menu').style.display = 'none';
   document.getElementById('game-area').style.display = '';
   buildBoard();
-  syncModules();
-  refresh();
+  await syncModules();
+  await refresh();
 
   if (mode === 'black') {
     triggerAiMove();
@@ -609,9 +663,8 @@ function playerColor() {
 async function triggerAiMove() {
   aiThinking = true;
   renderStatus();
-  await defer();
   const oldState = boardState;
-  const newState = game.make_ai_move();
+  const newState = await callWorker('make_ai_move');
 
   // Animate the AI's piece sliding to its new square
   if (newState.last_move) {
@@ -956,8 +1009,8 @@ function animateMushroomParticle(el, x, y, vx, vy, duration) {
 
 // --- Rendering ---
 
-function refresh() {
-  boardState = game.get_board_state();
+async function refresh() {
+  boardState = await callWorker('get_board_state');
   renderPieces();
   renderCaptured();
   renderStatus();
@@ -1047,9 +1100,8 @@ const EVAL_MODULES = [
   { key: 'draw_penalty', label: 'Draw Avoid',     color: '#9b59b6' },
 ];
 
-function renderEval() {
-  if (!game) return;
-  const breakdown = game.get_eval_breakdown();
+async function renderEval() {
+  const breakdown = await callWorker('get_eval_breakdown');
   if (!breakdown) return;
 
   const totalEl = document.getElementById('eval-total');
@@ -1081,13 +1133,13 @@ function renderEval() {
   }).join('');
 }
 
-function logMove(who, fromRow, fromCol, toRow, toCol) {
+async function logMove(who, fromRow, fromCol, toRow, toCol) {
   moveNumber++;
   const FILES = ['a','b','c','d','e','f','g','h'];
   const from = FILES[fromCol] + (fromRow + 1);
   const to = FILES[toCol] + (toRow + 1);
-  const breakdown = game.get_eval_breakdown();
-  const evals = game.get_last_evals();
+  const breakdown = await callWorker('get_eval_breakdown');
+  const evals = await callWorker('get_last_evals');
 
   const fmtVal = (v) => {
     const s = (v >= 0 ? '+' : '') + v.toFixed(1);
@@ -1110,7 +1162,7 @@ function logMove(who, fromRow, fromCol, toRow, toCol) {
 
 let pointerHandled = false;
 
-function onSquareClick(row, col) {
+async function onSquareClick(row, col) {
   if (pointerHandled) { pointerHandled = false; return; }
   if (boardState.game_over || aiThinking) return;
   if (!isPlayerTurn()) return;
@@ -1141,7 +1193,7 @@ function onSquareClick(row, col) {
   const cell = boardState.squares[row][col];
   if (cell && cell.color === playerColor()) {
     selectedSquare = { row, col };
-    const moves = game.get_legal_moves_for_square(row, col);
+    const moves = await callWorker('get_legal_moves_for_square', row, col);
     legalMovesForSelected = moves || [];
     renderPieces();
   } else {
@@ -1156,7 +1208,7 @@ let dragFrom = null;
 let isDragging = false;
 const dragGhost = document.getElementById('drag-ghost');
 
-function onPiecePointerDown(e, row, col) {
+async function onPiecePointerDown(e, row, col) {
   if (boardState.game_over || aiThinking) return;
   if (!isPlayerTurn()) return;
   const cell = boardState.squares[row][col];
@@ -1168,7 +1220,7 @@ function onPiecePointerDown(e, row, col) {
   isDragging = false;
 
   selectedSquare = { row, col };
-  legalMovesForSelected = game.get_legal_moves_for_square(row, col) || [];
+  legalMovesForSelected = await callWorker('get_legal_moves_for_square', row, col) || [];
   renderPieces();
 
   const drag = getDragContent(cell.color, cell.piece_type);
@@ -1248,9 +1300,9 @@ function clearSelection() {
   hintMove = null;
 }
 
-function executeMove(fromRow, fromCol, toRow, toCol, promotion) {
+async function executeMove(fromRow, fromCol, toRow, toCol, promotion) {
   const oldState = boardState;
-  const result = game.make_move(fromRow, fromCol, toRow, toCol, promotion);
+  const result = await callWorker('make_move', fromRow, fromCol, toRow, toCol, promotion);
   if (result && result.error) {
     console.error('Move error:', result.error);
     clearSelection();
@@ -1306,16 +1358,63 @@ function hidePromotionModal() {
 
 // --- AI Module Toggles ---
 
-function syncModules() {
+const DIFFICULTY_PRESETS = {
+  easy:   { depth: 1, autoDeepen: false, minEvals: 200000 },
+  medium: { depth: 1, autoDeepen: true,  minEvals: 50000 },
+  hard:   { depth: 2, autoDeepen: true,  minEvals: 200000 },
+};
+
+let currentDifficulty = 'medium';
+
+function applyDifficulty(preset) {
+  document.getElementById('depth-slider').value = preset.depth;
+  document.getElementById('mod-auto-deepen').checked = preset.autoDeepen;
+  document.getElementById('auto-deepen-min').value = String(preset.minEvals);
+}
+
+function setDifficulty(val) {
+  currentDifficulty = val;
+  document.querySelectorAll('.diff-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.diff === val);
+  });
+  const customControls = document.getElementById('custom-ai-controls');
+  if (val === 'custom') {
+    customControls.style.display = '';
+  } else {
+    customControls.style.display = 'none';
+    applyDifficulty(DIFFICULTY_PRESETS[val]);
+  }
+  syncModules();
+}
+
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => setDifficulty(btn.dataset.diff));
+});
+
+// In-game AI settings toggle
+document.getElementById('ai-settings-btn').addEventListener('click', () => {
+  const container = document.getElementById('ingame-settings');
+  if (container.style.display === 'none') {
+    container.style.display = '';
+    container.appendChild(document.getElementById('settings-panel'));
+  } else {
+    container.style.display = 'none';
+  }
+});
+
+async function syncModules() {
   document.getElementById('depth-val').textContent = document.getElementById('depth-slider').value;
-  if (!game) return;
-  game.set_module('mate', document.getElementById('mod-mate').checked);
-  game.set_module('material', document.getElementById('mod-material').checked);
-  game.set_module('centre', document.getElementById('mod-centre').checked);
-  game.set_module('passed_pawns', document.getElementById('mod-passed-pawns').checked);
-  game.set_module('draw_penalty', document.getElementById('mod-draw-penalty').checked);
+  const autoDeepen = document.getElementById('mod-auto-deepen').checked;
+  document.getElementById('auto-deepen-min').disabled = !autoDeepen;
+  await callWorker('set_module', 'mate', document.getElementById('mod-mate').checked);
+  await callWorker('set_module', 'material', document.getElementById('mod-material').checked);
+  await callWorker('set_module', 'centre', document.getElementById('mod-centre').checked);
+  await callWorker('set_module', 'passed_pawns', document.getElementById('mod-passed-pawns').checked);
+  await callWorker('set_module', 'draw_penalty', document.getElementById('mod-draw-penalty').checked);
   const depth = parseInt(document.getElementById('depth-slider').value);
-  game.set_depth(depth);
+  await callWorker('set_depth', depth);
+  const minEvals = parseInt(document.getElementById('auto-deepen-min').value);
+  await callWorker('set_auto_deepen', autoDeepen, minEvals);
 }
 
 document.getElementById('mod-mate').addEventListener('change', syncModules);
@@ -1323,7 +1422,19 @@ document.getElementById('mod-material').addEventListener('change', syncModules);
 document.getElementById('mod-centre').addEventListener('change', syncModules);
 document.getElementById('mod-passed-pawns').addEventListener('change', syncModules);
 document.getElementById('mod-draw-penalty').addEventListener('change', syncModules);
-document.getElementById('depth-slider').addEventListener('input', syncModules);
+function markCustom() {
+  if (currentDifficulty !== 'custom') {
+    currentDifficulty = 'custom';
+    document.querySelectorAll('.diff-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.diff === 'custom');
+    });
+    document.getElementById('custom-ai-controls').style.display = '';
+  }
+  syncModules();
+}
+document.getElementById('depth-slider').addEventListener('input', markCustom);
+document.getElementById('mod-auto-deepen').addEventListener('change', markCustom);
+document.getElementById('auto-deepen-min').addEventListener('change', markCustom);
 
 // --- Piece Set ---
 
@@ -1342,10 +1453,9 @@ async function requestHint(depth) {
   aiThinking = true;
   const statusEl = document.getElementById('status');
   statusEl.textContent = `Thinking (depth ${depth})…`;
-  await defer();
 
   try {
-    const hint = game.get_hint(depth);
+    const hint = await callWorker('get_hint', depth);
     if (hint && hint.from) {
       hintMove = { from: Array.from(hint.from), to: Array.from(hint.to) };
       renderPieces();
@@ -1372,6 +1482,7 @@ document.getElementById('new-game-btn').addEventListener('click', () => {
   // Move settings panel back to start menu
   const settings = document.getElementById('settings-panel');
   document.querySelector('#start-menu .menu-buttons').after(settings);
+  document.getElementById('ingame-settings').style.display = 'none';
   document.getElementById('game-area').style.display = 'none';
   document.getElementById('start-menu').style.display = '';
 });
@@ -1396,5 +1507,6 @@ main().catch(err => {
   console.error(err);
 });
 </script>
+<div id="wasm-compile-time" class="compile-time"></div>
 </body>
 </html>

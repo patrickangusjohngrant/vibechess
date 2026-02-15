@@ -8,7 +8,7 @@ use chess::piece::Color;
 
 const STOCKFISH_PATH: &str = "/home/patrick/.local/bin/stockfish";
 const MAX_MOVES: u32 = 200;
-const GAMES_PER_CONFIG: usize = 10;
+const GAMES_PER_CONFIG: usize = 6;
 
 struct StockfishEngine {
     child: std::process::Child,
@@ -229,27 +229,17 @@ fn main() {
     println!();
 
     let configs: Vec<(&str, AiConfig)> = vec![
-        ("d2 all-on", {
-            let mut c = AiConfig::new();
-            c.depth = 2;
-            c.auto_deepen = false;
-            c
-        }),
-        ("d2 mat+centre", {
-            let mut c = AiConfig::new();
-            c.depth = 2;
-            c.auto_deepen = false;
-            c.passed_pawn_module = false;
-            c
-        }),
-        ("d1 random", {
+        ("easy (d1 no-auto)", {
             let mut c = AiConfig::new();
             c.depth = 1;
             c.auto_deepen = false;
-            c.mate_module = false;
-            c.material_module = false;
-            c.centre_module = false;
-            c.passed_pawn_module = false;
+            c
+        }),
+        ("medium (d1 auto-50k)", {
+            let mut c = AiConfig::new();
+            c.depth = 1;
+            c.auto_deepen = true;
+            c.min_evals = 50_000;
             c
         }),
     ];
