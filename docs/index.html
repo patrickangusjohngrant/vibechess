@@ -685,15 +685,15 @@ function buildBoard() {
 // --- Capture explosion ---
 
 function checkForCapture(oldState, newState) {
-  if (!oldState || !newState || !newState.last_move) return;
+  if (!oldState || !newState || !newState.last_move) return false;
   const [from, to] = newState.last_move;
 
   // Check if the target square had an enemy piece in the old state
   const victim = oldState.squares[to[0]][to[1]];
-  if (!victim) return;
+  if (!victim) return false;
 
   const toSq = document.querySelector(`.square[data-row="${to[0]}"][data-col="${to[1]}"]`);
-  if (!toSq) return;
+  if (!toSq) return false;
 
   const rect = toSq.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
@@ -701,6 +701,7 @@ function checkForCapture(oldState, newState) {
   const dirX = to[1] - from[1];
   const dirY = -(to[0] - from[0]);
   spawnExplosion(cx, cy, dirX, dirY);
+  return true;
 }
 
 function spawnExplosion(cx, cy, dirX, dirY) {
@@ -1261,13 +1262,14 @@ function executeMove(fromRow, fromCol, toRow, toCol, promotion) {
   }
   renderPieces();
   renderCaptured();
-  checkForCapture(oldState, boardState);
+  const wasCapture = checkForCapture(oldState, boardState);
   renderStatus();
   renderEval();
   if (boardState.game_over) { playEndAnimation(); return; }
 
   if (!isPlayerTurn()) {
-    triggerAiMove();
+    // Delay AI move so capture explosion can play out
+    setTimeout(() => triggerAiMove(), wasCapture ? 400 : 0);
   }
 }
 
