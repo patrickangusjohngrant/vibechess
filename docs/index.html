@@ -424,7 +424,7 @@
 
 <script type="module">
 // --- Worker proxy ---
-const worker = new Worker('worker.js', { type: 'module' });
+const worker = new Worker('worker.js?v=3', { type: 'module' });
 let _callId = 0;
 const _pending = {};
 let _initResolve;

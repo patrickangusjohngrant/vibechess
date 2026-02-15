@@ -1,4 +1,4 @@
-import init, { Game, build_timestamp } from './pkg/chess.js?v=2';
+import init, { Game, build_timestamp } from './pkg/chess.js?v=4';
 
 let game = null;
 
